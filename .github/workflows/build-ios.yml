@@ -1,0 +1,81 @@
+name: Build iOS 16.0 IPA (TrollStore)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract product assets from original Assets.car
+        run: |
+          swift scripts/extract_assets.swift
+
+      - name: Install XcodeGen & generate Xcode project
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen generate
+
+      - name: Build Release App for iOS 16.0+ (arm64)
+        run: |
+          xcodebuild clean build \
+            -project nicehck.xcodeproj \
+            -scheme nicehck \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            IPHONEOS_DEPLOYMENT_TARGET=16.0 \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify iOS 16.0 compatibility & absence of iOS 17 exclusive symbols
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/nicehck.app"
+          BIN_PATH="$APP_PATH/nicehck"
+
+          echo "=== 1. Checking Info.plist MinimumOSVersion ==="
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP_PATH/Info.plist")
+          echo "MinimumOSVersion = $MIN_OS"
+          if [ "$MIN_OS" != "16.0" ]; then
+            echo "ERROR: Expected MinimumOSVersion 16.0, got $MIN_OS"
+            exit 1
+          fi
+
+          echo "=== 2. Checking LC_BUILD_VERSION minos ==="
+          otool -l "$BIN_PATH" | grep -A 5 "LC_BUILD_VERSION"
+
+          echo "=== 3. Checking linked dylibs (must NOT link Observation or SwiftData) ==="
+          otool -L "$BIN_PATH"
+          if otool -L "$BIN_PATH" | grep -E "Observation|SwiftData"; then
+            echo "ERROR: Binary links iOS 17 exclusive frameworks!"
+            exit 1
+          fi
+
+          echo "=== 4. Ad-hoc signing for TrollStore compatibility ==="
+          codesign --force --deep --sign - "$APP_PATH"
+
+      - name: Package Unsigned / Ad-hoc TrollStore IPA
+        run: |
+          mkdir -p Payload
+          cp -R "build/Build/Products/Release-iphoneos/nicehck.app" Payload/
+          cp "scripts/AppIcon60x60@2x.png" Payload/nicehck.app/
+          cp "scripts/AppIcon76x76@2x~ipad.png" Payload/nicehck.app/
+          zip -r9 "nicehck_2.2.7_iOS16.ipa" Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nicehck_2.2.7_iOS16_ipa
+          path: nicehck_2.2.7_iOS16.ipa
+          if-no-files-found: error

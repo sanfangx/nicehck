@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "NICEHCK";
+"CFBundleName" = "NICEHCK";
+"NSBluetoothAlwaysUsageDescription" = "Please enable Bluetooth access in Settings to connect and manage your devices.";
+"NSBluetoothPeripheralUsageDescription" = "Please enable Bluetooth access in Settings to connect and manage your devices.";

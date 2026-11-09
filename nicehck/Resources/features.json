@@ -1,0 +1,137 @@
+[
+  {
+    "id": 21,
+    "deviceId": 2,
+    "featureOptionId": 1,
+    "type": "BtNoiseControl",
+    "priority": 1,
+    "minVersion": 0,
+    "maxVersion": 9999
+  },
+  {
+    "id": 22,
+    "deviceId": 2,
+    "featureOptionId": 2,
+    "type": "BtEqualizerSetting",
+    "priority": 1,
+    "minVersion": 0,
+    "maxVersion": 9999
+  },
+  {
+    "id": 23,
+    "deviceId": 2,
+    "featureOptionId": 2,
+    "type": "BtToneVolume",
+    "priority": 2,
+    "minVersion": 0,
+    "maxVersion": 9999
+  },
+  {
+    "id": 24,
+    "deviceId": 2,
+    "featureOptionId": 3,
+    "type": "BtGameMode",
+    "priority": 1,
+    "minVersion": 0,
+    "maxVersion": 406
+  },
+  {
+    "id": 25,
+    "deviceId": 2,
+    "featureOptionId": 3,
+    "type": "BtLatencyMode",
+    "priority": 2,
+    "minVersion": 0,
+    "maxVersion": 406
+  },
+  {
+    "id": 26,
+    "deviceId": 2,
+    "featureOptionId": 4,
+    "type": "BtDualConnection",
+    "priority": 1,
+    "minVersion": 0,
+    "maxVersion": 9999
+  },
+  {
+    "id": 27,
+    "deviceId": 2,
+    "featureOptionId": 4,
+    "type": "BtCodecControl",
+    "priority": 2,
+    "minVersion": 0,
+    "maxVersion": 9999
+  },
+  {
+    "id": 28,
+    "deviceId": 2,
+    "featureOptionId": 5,
+    "type": "BtTouchControl",
+    "priority": 1,
+    "minVersion": 0,
+    "maxVersion": 406
+  },
+  {
+    "id": 29,
+    "deviceId": 2,
+    "featureOptionId": 5,
+    "type": "BtInEarDetection",
+    "priority": 2,
+    "minVersion": 406,
+    "maxVersion": 9999
+  },
+  {
+    "id": 30,
+    "deviceId": 2,
+    "featureOptionId": 6,
+    "type": "BtOTA",
+    "priority": 1,
+    "minVersion": 0,
+    "maxVersion": 9999
+  },
+  {
+    "id": 31,
+    "deviceId": 2,
+    "featureOptionId": 7,
+    "type": "BtOriginExperiment",
+    "priority": 1,
+    "minVersion": 0,
+    "maxVersion": 9999
+  },
+  {
+    "id": 32,
+    "deviceId": 2,
+    "featureOptionId": 7,
+    "type": "BtFindEarbuds",
+    "priority": 1,
+    "minVersion": 0,
+    "maxVersion": 9999
+  },
+  {
+    "id": 33,
+    "deviceId": 2,
+    "featureOptionId": 3,
+    "type": "BtGameModeV2",
+    "priority": 1,
+    "minVersion": 407,
+    "maxVersion": 9999
+  },
+  {
+    "id": 34,
+    "deviceId": 2,
+    "featureOptionId": 3,
+    "type": "BtLatencyModeV2",
+    "priority": 2,
+    "minVersion": 407,
+    "maxVersion": 9999
+  },
+  {
+    "id": 35,
+    "deviceId": 2,
+    "featureOptionId": 5,
+    "type": "BtTouchControlWithAncControl",
+    "priority": 1,
+    "minVersion": 407,
+    "maxVersion": 9999
+  }
+]

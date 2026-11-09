@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "NICEHCK";
+"CFBundleName" = "NICEHCK";
+"NSBluetoothAlwaysUsageDescription" = "デバイスを接続して管理するには、設定でBluetoothアクセスを有効にしてください。";
+"NSBluetoothPeripheralUsageDescription" = "デバイスを接続して管理するには、設定でBluetoothアクセスを有効にしてください。";

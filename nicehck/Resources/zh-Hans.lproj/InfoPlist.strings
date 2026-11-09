@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "原道";
+"CFBundleName" = "原道";
+"NSBluetoothAlwaysUsageDescription" = "请在设置中启用蓝牙权限以连接和管理您的设备。";
+"NSBluetoothPeripheralUsageDescription" = "请在设置中启用蓝牙权限以连接和管理您的设备。";

@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1,
+    "deviceId": 2,
+    "eqIndex": 0,
+    "eqNameMap": 0,
+    "eqName": "eq_name_pop",
+    "minVersion": 0,
+    "maxVersion": 999999
+  },
+  {
+    "id": 2,
+    "deviceId": 2,
+    "eqIndex": 1,
+    "eqNameMap": 1,
+    "eqName": "eq_name_balance",
+    "minVersion": 0,
+    "maxVersion": 999999
+  },
+  {
+    "id": 3,
+    "deviceId": 2,
+    "eqIndex": 2,
+    "eqNameMap": 2,
+    "eqName": "eq_name_rock",
+    "minVersion": 0,
+    "maxVersion": 999999
+  },
+  {
+    "id": 4,
+    "deviceId": 2,
+    "eqIndex": 3,
+    "eqNameMap": 3,
+    "eqName": "eq_name_natural",
+    "minVersion": 0,
+    "maxVersion": 999999
+  },
+  {
+    "id": 5,
+    "deviceId": 2,
+    "eqIndex": 4,
+    "eqNameMap": 4,
+    "eqName": "eq_name_gaming",
+    "minVersion": 0,
+    "maxVersion": 999999
+  },
+  {
+    "id": 6,
+    "deviceId": 2,
+    "eqIndex": 5,
+    "eqNameMap": 5,
+    "eqName": "eq_name_fine_tone",
+    "minVersion": 407,
+    "maxVersion": 999999
+  },
+  {
+    "id": 7,
+    "deviceId": 2,
+    "eqIndex": 6,
+    "eqNameMap": 6,
+    "eqName": "eq_name_velvet_voice",
+    "minVersion": 407,
+    "maxVersion": 999999
+  }
+]
