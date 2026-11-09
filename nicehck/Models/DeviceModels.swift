@@ -91,12 +91,15 @@ struct FeatureOption: Codable, Identifiable, Equatable {
 
 struct BtEqualizer: Codable, Identifiable, Equatable {
     let id: Int
-    let name: String
     let deviceId: Int
     let eqIndex: Int
-    let priority: Int
+    let eqNameMap: Int
+    let eqName: String
     let minVersion: Int
     let maxVersion: Int
+
+    var name: String { eqName }
+    var priority: Int { eqNameMap }
 }
 
 struct FeatureGroup: Identifiable {
@@ -134,7 +137,15 @@ final class DeviceManager {
             .sorted { $0.priority < $1.priority }
         features = loadJSON("features", fallback: [])
             .sorted { $0.priority < $1.priority }
-        equalizers = loadJSON("btEqualizerConfig", fallback: [])
+        equalizers = loadJSON("btEqualizerConfig", fallback: [
+            BtEqualizer(id: 1, deviceId: 2, eqIndex: 0, eqNameMap: 0, eqName: "eq_name_pop", minVersion: 0, maxVersion: 999999),
+            BtEqualizer(id: 2, deviceId: 2, eqIndex: 1, eqNameMap: 1, eqName: "eq_name_balance", minVersion: 0, maxVersion: 999999),
+            BtEqualizer(id: 3, deviceId: 2, eqIndex: 2, eqNameMap: 2, eqName: "eq_name_rock", minVersion: 0, maxVersion: 999999),
+            BtEqualizer(id: 4, deviceId: 2, eqIndex: 3, eqNameMap: 3, eqName: "eq_name_natural", minVersion: 0, maxVersion: 999999),
+            BtEqualizer(id: 5, deviceId: 2, eqIndex: 4, eqNameMap: 4, eqName: "eq_name_gaming", minVersion: 0, maxVersion: 999999),
+            BtEqualizer(id: 6, deviceId: 2, eqIndex: 5, eqNameMap: 5, eqName: "eq_name_fine_tone", minVersion: 407, maxVersion: 999999),
+            BtEqualizer(id: 7, deviceId: 2, eqIndex: 6, eqNameMap: 6, eqName: "eq_name_velvet_voice", minVersion: 407, maxVersion: 999999)
+        ])
             .sorted { $0.priority < $1.priority }
     }
 
