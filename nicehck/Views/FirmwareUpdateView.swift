@@ -46,6 +46,7 @@ struct FirmwareUpdateView: View {
     @ObservedObject var firmwareRepo: FirmwareRepository
     @StateObject private var otaManager: OTAManager
     @Environment(\.dismiss) private var dismiss
+    @State private var hasCopiedDiagnostics = false
 
     init(linkDevice: LinkDevice, firmwareRepo: FirmwareRepository) {
         self.linkDevice = linkDevice
@@ -59,6 +60,8 @@ struct FirmwareUpdateView: View {
                 currentVersionCard
                 importantNoticesCard
                 updateStatusContent
+                diagnosticsCard
+                liveLogCard
             }
             .padding(16)
         }
@@ -77,6 +80,52 @@ struct FirmwareUpdateView: View {
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
         }
+        .onChange(of: linkDevice.btDeviceInfo.firmwareVersion) { _ in
+            guard !otaManager.isUpgrading else { return }
+            Task {
+                await firmwareRepo.checkFirmwareUpdate(
+                    deviceId: linkDevice.device.id,
+                    currentVersion: linkDevice.btDeviceInfo.firmwareVersionInt
+                )
+            }
+        }
+    }
+
+    private func refreshDiagnosticsAndFirmware() {
+        linkDevice.queryAllState()
+        Task {
+            await firmwareRepo.checkFirmwareUpdate(
+                deviceId: linkDevice.device.id,
+                currentVersion: linkDevice.btDeviceInfo.firmwareVersionInt
+            )
+        }
+    }
+
+    private func fullDiagnosticReport() -> String {
+        var lines: [String] = [
+            "Device: \(linkDevice.device.displayName) (deviceId=\(linkDevice.device.id))",
+            "Connection: \(linkDevice.connectionState.rawValue), isOTAReady=\(linkDevice.isOTAReady)",
+            "Parsed Version: \(linkDevice.btDeviceInfo.firmwareVersion ?? "nil") (int=\(linkDevice.btDeviceInfo.firmwareVersionInt))",
+            "Parsed BT Device ID: \(linkDevice.btDeviceInfo.btDeviceId ?? "nil")",
+            "0x0003 Raw Hex: \(linkDevice.btDeviceInfo.rawFirmwareVersionHex ?? "nil")",
+            "0x0001 Raw Hex: \(linkDevice.btDeviceInfo.rawDeviceIdHex ?? "nil")",
+            "ATT Max Write: \(linkDevice.maxOTAWriteLength) B (\(linkDevice.otaWriteTypeName))",
+            "Server Summary: \(firmwareRepo.lastHttpSummary ?? "nil")",
+            "Server URL: \(firmwareRepo.lastFirmwareInfo?.downloadUrl ?? "nil")"
+        ]
+        if !otaManager.currentStepDetail.isEmpty {
+            lines.append("OTA Step: \(otaManager.currentStepDetail)")
+        }
+        if let err = otaManager.state.error {
+            lines.append("OTA Error: \(err)")
+        }
+        lines.append("--- OTA Log (\(otaManager.diagnosticLogs.count) lines) ---")
+        if otaManager.diagnosticLogs.isEmpty {
+            lines.append("(empty)")
+        } else {
+            lines.append(otaManager.formattedDiagnosticLog)
+        }
+        return lines.joined(separator: "\n")
     }
 
     private var currentVersionCard: some View {
@@ -307,6 +356,12 @@ struct FirmwareUpdateView: View {
             Text(L10n.tr(otaManager.state.statusTextKey))
                 .font(.caption)
                 .foregroundColor(.secondary)
+
+            if !otaManager.currentStepDetail.isEmpty {
+                Text(otaManager.currentStepDetail)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
         }
         .sectionCardStyle()
     }
@@ -348,6 +403,117 @@ struct FirmwareUpdateView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
+        .sectionCardStyle()
+    }
+
+    private var diagnosticsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(L10n.tr("ota_diagnostics_title"), systemImage: "stethoscope")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button {
+                    refreshDiagnosticsAndFirmware()
+                } label: {
+                    Label(L10n.tr("ota_refresh_action"), systemImage: "arrow.clockwise")
+                        .font(.caption.weight(.medium))
+                }
+                .disabled(otaManager.isUpgrading)
+            }
+
+            Divider()
+
+            diagnosticRow(
+                L10n.tr("ota_diag_raw_version"),
+                "\(linkDevice.btDeviceInfo.rawFirmwareVersionHex ?? "nil") -> \(linkDevice.btDeviceInfo.firmwareVersion ?? "nil") (\(linkDevice.btDeviceInfo.firmwareVersionInt))"
+            )
+            diagnosticRow(
+                L10n.tr("ota_diag_raw_device_id"),
+                "\(linkDevice.btDeviceInfo.rawDeviceIdHex ?? "nil") -> \(linkDevice.btDeviceInfo.btDeviceId ?? "nil")"
+            )
+            diagnosticRow(
+                L10n.tr("ota_diag_ota_ready"),
+                linkDevice.isOTAReady ? "true" : "false"
+            )
+            diagnosticRow(
+                L10n.tr("ota_diag_max_write"),
+                "\(linkDevice.maxOTAWriteLength) B (\(linkDevice.otaWriteTypeName))"
+            )
+            diagnosticRow(
+                L10n.tr("ota_diag_server_result"),
+                firmwareRepo.lastHttpSummary ?? "-"
+            )
+            if let url = firmwareRepo.lastFirmwareInfo?.downloadUrl {
+                diagnosticRow(L10n.tr("ota_diag_server_url"), url)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sectionCardStyle()
+    }
+
+    private func diagnosticRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(.primary)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var liveLogCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(L10n.tr("ota_logs_title"), systemImage: "terminal")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = fullDiagnosticReport()
+                    hasCopiedDiagnostics = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        hasCopiedDiagnostics = false
+                    }
+                } label: {
+                    Text(hasCopiedDiagnostics ? L10n.tr("ota_logs_copied") : L10n.tr("ota_copy_logs"))
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            if otaManager.diagnosticLogs.isEmpty {
+                Text(L10n.tr("ota_logs_empty"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 6)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 3) {
+                            ForEach(Array(otaManager.diagnosticLogs.enumerated()), id: \.offset) { item in
+                                Text(item.element)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundColor(.primary)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            Color.clear
+                                .frame(height: 1)
+                                .id("otaLogBottom")
+                        }
+                    }
+                    .frame(maxHeight: 220)
+                    .onChange(of: otaManager.diagnosticLogs.count) { _ in
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo("otaLogBottom", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .sectionCardStyle()
     }
 }

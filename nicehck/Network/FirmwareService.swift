@@ -68,21 +68,32 @@ final class FirmwareAPIService {
 @MainActor
 final class FirmwareRepository: ObservableObject {
     @Published var updateState: FirmwareUpdateState = .checking
+    @Published private(set) var lastCheckedAt: Date?
+    @Published private(set) var lastHttpSummary: String?
+    @Published private(set) var lastFirmwareInfo: FirmwareInfo?
 
     func checkFirmwareUpdate(deviceId: Int, currentVersion: Int) async {
         updateState = .checking
+        let checkedAt = Date()
         do {
             let response = try await FirmwareAPIService.shared.getLatestVersion(deviceId: deviceId)
+            lastCheckedAt = checkedAt
             if response.code == 200, let info = response.data {
+                lastFirmwareInfo = info
+                lastHttpSummary = "code=\(response.code), serverVer=\(info.firmwareVersion) (\(info.firmwareName)), localVer=\(currentVersion)"
                 if currentVersion > 0 && info.firmwareVersion > currentVersion {
                     updateState = .shouldUpdate(info)
                 } else {
                     updateState = .noUpdate(info)
                 }
             } else {
+                lastFirmwareInfo = nil
+                lastHttpSummary = "code=\(response.code), data=nil, localVer=\(currentVersion)"
                 updateState = .noUpdate(nil)
             }
         } catch let urlError as URLError {
+            lastCheckedAt = checkedAt
+            lastHttpSummary = "URLError(\(urlError.code.rawValue)): \(urlError.localizedDescription)"
             switch urlError.code {
             case .notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost, .cannotConnectToHost:
                 updateState = .networkFailed
@@ -90,6 +101,8 @@ final class FirmwareRepository: ObservableObject {
                 updateState = .failed(urlError.localizedDescription)
             }
         } catch {
+            lastCheckedAt = checkedAt
+            lastHttpSummary = "Error: \(error.localizedDescription)"
             updateState = .failed(error.localizedDescription)
         }
     }
@@ -100,6 +113,7 @@ final class FirmwareRepository: ObservableObject {
             let data = try await FirmwareAPIService.shared.downloadFirmware(from: info.downloadUrl)
             updateState = .downloadComplete(info, data)
         } catch {
+            lastHttpSummary = "Download failed: \(error.localizedDescription)"
             updateState = .failed(error.localizedDescription)
         }
     }

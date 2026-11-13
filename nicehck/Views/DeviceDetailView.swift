@@ -74,6 +74,13 @@ struct DeviceDetailView: View {
         .onChange(of: linkDevice.btDeviceInfo.firmwareVersion) { _ in
             checkFirmwareIfNeeded()
         }
+        .onChange(of: linkDevice.connectionState) { newState in
+            if newState == .disconnected {
+                hasCheckedFirmware = false
+            } else if newState == .connected {
+                checkFirmwareIfNeeded()
+            }
+        }
     }
 
     private func checkFirmwareIfNeeded() {

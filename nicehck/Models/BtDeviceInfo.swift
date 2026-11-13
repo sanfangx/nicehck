@@ -312,7 +312,9 @@ enum CodecEnum: UInt8, CaseIterable, Identifiable, Equatable {
 
 final class BtDeviceInfo: ObservableObject {
     @Published var btDeviceId: String?
+    @Published var rawDeviceIdHex: String?
     @Published var firmwareVersion: String?
+    @Published var rawFirmwareVersionHex: String?
     @Published var serialNumber: String?
     @Published var batteryLevel: BatteryLevel?
     @Published var noiseControl: NoiseControl?
@@ -332,5 +334,25 @@ final class BtDeviceInfo: ObservableObject {
         let digitsOnly = fw.replacingOccurrences(of: ".", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return Int(digitsOnly) ?? 0
+    }
+
+    func reset() {
+        btDeviceId = nil
+        rawDeviceIdHex = nil
+        firmwareVersion = nil
+        rawFirmwareVersionHex = nil
+        serialNumber = nil
+        batteryLevel = nil
+        noiseControl = nil
+        ancTouchControl = nil
+        toneVolume = nil
+        touchControl = nil
+        codec = nil
+        dualConnection = nil
+        lowLatencyMode = nil
+        eqIndex = nil
+        gameMode = nil
+        inEarDetection = nil
+        experimentWind = nil
     }
 }

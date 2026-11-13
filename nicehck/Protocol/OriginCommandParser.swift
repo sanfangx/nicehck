@@ -75,11 +75,16 @@ enum OriginCommandParser {
         }
     }
 
-    /// `0x1000a6a0c`: Used for `0x0001` (`btDeviceId`) and `0x0003` (`firmwareVersion`)
+    /// `0x1000a6a0c`: Used for `0x0001` (`btDeviceId`) and `0x0003` (`firmwareVersion`).
+    /// Firmware encodes these 2-byte fields as little-endian `UInt16` (`[0x05, 0x04]` -> `0x0405` -> `"0405"`).
     static func parseTwoByteUpperHex(_ payload: Data) -> String {
         let b = [UInt8](payload)
         guard b.count >= 2 else { return "?.?" }
-        return String(format: "%02X%02X", b[0], b[1])
+        return String(format: "%02X%02X", b[1], b[0])
+    }
+
+    static func rawHexString(_ payload: Data) -> String {
+        payload.map { String(format: "%02X", $0) }.joined(separator: " ")
     }
 
     /// `0x1000a6b5c`: Used for `0x0004` (`serialNumber`)

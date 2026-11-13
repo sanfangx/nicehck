@@ -91,27 +91,34 @@ struct OTAState: Equatable {
 
 enum OTAError: LocalizedError {
     case deviceNotConnected
+    case disconnectedDuringUpgrade
     case characteristicUnavailable
     case invalidFirmwareImage
     case timeout(OTAPackageType)
-    case unexpectedResponse
-    case crcVerificationFailed
+    case unexpectedResponse(String)
+    case crcVerificationFailed(String)
     case upgradeRejected(String)
 
     var errorDescription: String? {
         switch self {
         case .deviceNotConnected:
             return NSLocalizedString("device_not_connected", comment: "")
+        case .disconnectedDuringUpgrade:
+            return NSLocalizedString("ota_error_disconnected", comment: "")
         case .characteristicUnavailable:
             return NSLocalizedString("not_ready_for_update", comment: "")
         case .invalidFirmwareImage:
-            return NSLocalizedString("update_failed", comment: "")
-        case .timeout:
-            return NSLocalizedString("update_failed", comment: "")
-        case .unexpectedResponse:
-            return NSLocalizedString("update_failed", comment: "")
-        case .crcVerificationFailed:
-            return "CRC 校验失败"
+            return NSLocalizedString("ota_error_invalid_image", comment: "")
+        case .timeout(let type):
+            return String(
+                format: "%@ (cmd 0x%02X)",
+                NSLocalizedString("update_failed", comment: ""),
+                type.rawValue
+            )
+        case .unexpectedResponse(let detail):
+            return "\(NSLocalizedString("update_failed", comment: "")) (\(detail))"
+        case .crcVerificationFailed(let detail):
+            return detail
         case .upgradeRejected(let msg):
             return msg
         }
@@ -160,9 +167,9 @@ enum OTACommand {
         createCommand(type: .getProtocol, payload: [0x00, 0x00, 0x00, 0x01])
     }
 
-    /// Step 2: `0x9D` setUpgradeType (`0x100031c20`)
-    static func setUpgradeType() -> Data {
-        createCommand(type: .setUpgradeType, payload: [0x00])
+    /// Step 2: `0x97` setUser (`0x100031d04`, `0x1000f3c88`)
+    static func setUser() -> Data {
+        createCommand(type: .setUser, payload: [0x01])
     }
 
     /// Step 3: `0x8E` getCurrentVersion (`0x100029fb4`)
@@ -170,33 +177,32 @@ enum OTACommand {
         createCommand(type: .getCurrentVersion, payload: magicCode)
     }
 
-    /// Step 4: `0x97` setUser (`0x100031d04`)
-    static func setUser() -> Data {
-        createCommand(type: .setUser, payload: [0x01])
+    /// Step 4: `0x9D` setUpgradeType (`0x100031c20`, `0x1000f3cb8` — fire-and-forget + 1.0s sleep)
+    static func setUpgradeType() -> Data {
+        createCommand(type: .setUpgradeType, payload: [0x01])
     }
 
-    /// Step 5: `0x9B` getRoleSwitchRandomId (`0x100031df4`)
+    /// Step 5: `0x9B` getRoleSwitchRandomId (`0x100031df4` — empty payload, fire-and-forget + 1.0s sleep)
     static func getRoleSwitchRandomId() -> Data {
-        createCommand(type: .getRoleSwitchRandomId, payload: [0x01])
+        createCommand(type: .getRoleSwitchRandomId, payload: [])
     }
 
-    /// Step 6: `0x90` selectSide (`0x100032090`)
+    /// Step 6: `0x90` selectSide (`0x100032090`, `0x1000f3ce8`)
     static func selectSide() -> Data {
         createCommand(type: .selectSide, payload: [0x00])
     }
 
     /// Step 7: `0x8C` getTransmissionResumingAtBreakPoint (`0x10002a054`, 44-byte payload)
-    static func getTransmissionResumingAtBreakPoint(imageData: Data) -> Data? {
-        guard imageData.count >= 32 else { return nil }
-        let first32 = Data(imageData.prefix(32))
-        let headerCrc = crc32(first32)
+    static func getTransmissionResumingAtBreakPoint() -> Data {
+        var checkData = [UInt8](repeating: 0, count: 32)
+        appendUInt32LE(0x04030201, to: &checkData)
+        let checkCrc = crc32(Data(checkData))
 
         var payload: [UInt8] = []
         payload.reserveCapacity(44)
         payload.append(contentsOf: magicCode)
-        appendUInt32LE(UInt32(imageData.count), to: &payload)
-        payload.append(contentsOf: first32)
-        appendUInt32LE(headerCrc, to: &payload)
+        payload.append(contentsOf: checkData)
+        appendUInt32LE(checkCrc, to: &payload)
         return createCommand(type: .getTransmissionResumingAtBreakPoint, payload: payload)
     }
 
@@ -213,29 +219,18 @@ enum OTACommand {
 
     /// Step 9: `0x86` config (`0x10002a460`, 92-byte payload)
     static func config(imageData: Data) -> Data? {
-        guard imageData.count >= 8 else { return nil }
+        guard imageData.count >= 4 else { return nil }
         let bytes = [UInt8](imageData)
         let n = bytes.count
-        let tagOffset = Int(
-            UInt32(bytes[n - 4]) |
-            (UInt32(bytes[n - 3]) << 8) |
-            (UInt32(bytes[n - 2]) << 16) |
-            (UInt32(bytes[n - 1]) << 24)
-        )
-        let versionTag: [UInt8]
-        if tagOffset >= 0 && tagOffset + 4 <= n {
-            versionTag = Array(bytes[tagOffset..<(tagOffset + 4)])
-        } else {
-            versionTag = [0x00, 0x00, 0x00, 0x00]
-        }
 
         var payload: [UInt8] = []
         payload.reserveCapacity(92)
-        appendUInt32LE(88, to: &payload) // 0x58000000
-        payload.append(contentsOf: versionTag)
-        var tail = [UInt8](repeating: 0, count: 84)
-        tail[4] = 0x01 // Offset 12 in payload
-        payload.append(contentsOf: tail)
+        appendUInt32LE(88, to: &payload) // Length prefix excluding trailing 4B CRC32
+        payload.append(contentsOf: bytes[(n - 4)..<(n - 1)]) // 3 ASCII hex tail chars (e.g. "3CF")
+        payload.append(0x00)
+        payload.append(contentsOf: [UInt8](repeating: 0, count: 80))
+        let configCrc = crc32(Data(payload))
+        appendUInt32LE(configCrc, to: &payload)
         return createCommand(type: .config, payload: payload)
     }
 
@@ -263,10 +258,14 @@ enum OTACommand {
         createCommand(type: .imageOverwritingConfirmation, payload: magicCode)
     }
 
+    /// BES KFifo packet limit is `0x29d` (669) bytes including 5-byte TLV header -> 664-byte payload max
+    static let maxDataChunkPayload = 664
+
     /// Split firmware image into 32 KB (`0x8000`) segments (`0x10003382c`)
-    static func splitImageIntoSegments(imageData: Data, deviceMtu: Int) -> [ImageSegment] {
+    static func splitImageIntoSegments(imageData: Data, maxChunkPayload: Int) -> [ImageSegment] {
         let segmentSize = 32768 // 32 KB
-        let chunkSize = max(16, (deviceMtu - 8) & ~3)
+        let clamped = min(maxChunkPayload, maxDataChunkPayload) & ~3
+        let chunkSize = max(8, clamped)
         var segments: [ImageSegment] = []
         var offset = 0
         var idx = 0
@@ -293,6 +292,36 @@ enum OTACommand {
 }
 
 enum OTACommandParser {
+    /// Extract complete 5-byte TLV packets (`[type, lenLE(4B)] + payload`) from a buffered stream
+    static func extractPackets(from buffer: inout Data) -> [(type: OTAPackageType, payload: Data)] {
+        var packets: [(type: OTAPackageType, payload: Data)] = []
+        while buffer.count >= 5 {
+            let start = buffer.startIndex
+            let opcode = buffer[start]
+            let payloadLen = Int(
+                UInt32(buffer[start + 1]) |
+                (UInt32(buffer[start + 2]) << 8) |
+                (UInt32(buffer[start + 3]) << 16) |
+                (UInt32(buffer[start + 4]) << 24)
+            )
+            guard let type = OTAPackageType(rawValue: opcode),
+                  payloadLen >= 0,
+                  payloadLen <= 4096 else {
+                // Drop leading out-of-sync byte and try next boundary
+                buffer.removeFirst(1)
+                continue
+            }
+            let totalLen = 5 + payloadLen
+            guard buffer.count >= totalLen else {
+                break
+            }
+            let payload = Data(buffer[(start + 5)..<(start + totalLen)])
+            buffer.removeFirst(totalLen)
+            packets.append((type, payload))
+        }
+        return packets
+    }
+
     static func parsePacket(_ data: Data) -> (type: OTAPackageType, payload: Data)? {
         let bytes = [UInt8](data)
         guard bytes.count >= 5,
@@ -309,6 +338,25 @@ enum OTACommandParser {
         let actualLen = min(max(0, payloadLen), available)
         let payload = Data(bytes[5..<(5 + actualLen)])
         return (type, payload)
+    }
+
+    /// `0x81` fetchOTA response: `"BEST..."` (optional LE UInt16 MTU at `[8..<10]`) or 1-byte `[0x01]`
+    static func parseFetchOTAResponse(_ payload: Data) -> (accepted: Bool, negotiatedMtu: Int?) {
+        let b = [UInt8](payload)
+        if b.count >= 4 && Array(b[0..<4]) == OTACommand.magicCode {
+            var mtu: Int? = nil
+            if b.count >= 10 {
+                let m = Int(UInt16(b[8]) | (UInt16(b[9]) << 8))
+                if m > 0 {
+                    mtu = m
+                }
+            }
+            return (true, mtu)
+        }
+        if let first = b.first {
+            return (first == 0x01, nil)
+        }
+        return (false, nil)
     }
 
     /// `0x10002a90c`

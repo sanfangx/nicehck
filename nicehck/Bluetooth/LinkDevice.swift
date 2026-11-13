@@ -37,6 +37,8 @@ final class LinkDevice: NSObject, ObservableObject, Identifiable {
 
     /// Callback for OTA notification packets on `77777777-7777-7777-7777-777777777777`
     var onOTADataReceived: ((Data) -> Void)?
+    /// Callback invoked on main queue when the peripheral disconnects
+    var onDisconnected: (() -> Void)?
 
     init(identify: String, device: Device, peripheral: CBPeripheral? = nil) {
         self.identify = identify
@@ -73,6 +75,8 @@ final class LinkDevice: NSObject, ObservableObject, Identifiable {
         DispatchQueue.main.async {
             self.connectionState = .disconnected
             self.isOTAReady = false
+            self.btDeviceInfo.reset()
+            self.onDisconnected?()
         }
         writeCharacteristic = nil
         notifyCharacteristic = nil
@@ -128,6 +132,29 @@ final class LinkDevice: NSObject, ObservableObject, Identifiable {
             : .withResponse
         peripheral.writeValue(data, for: characteristic, type: writeType)
         return true
+    }
+
+    /// Maximum ATT payload bytes CoreBluetooth accepts per write on the OTA characteristic
+    var maxOTAWriteLength: Int {
+        guard let peripheral = peripheral, peripheral.state == .connected else {
+            return 20
+        }
+        let writeType: CBCharacteristicWriteType
+        if let characteristic = otaCharacteristic {
+            writeType = characteristic.properties.contains(.writeWithoutResponse)
+                ? .withoutResponse
+                : .withResponse
+        } else {
+            writeType = .withoutResponse
+        }
+        return max(20, peripheral.maximumWriteValueLength(for: writeType))
+    }
+
+    var otaWriteTypeName: String {
+        guard let characteristic = otaCharacteristic else { return "unavailable" }
+        return characteristic.properties.contains(.writeWithoutResponse)
+            ? "withoutResponse"
+            : "withResponse"
     }
 
     // MARK: - 16-Command Initial State Query (`LinkDevice.queryAllState`, `0x10004a924`)
@@ -310,10 +337,12 @@ final class LinkDevice: NSObject, ObservableObject, Identifiable {
             switch frame.command {
             case 0x0001:
                 self.btDeviceInfo.btDeviceId = OriginCommandParser.parseTwoByteUpperHex(payload)
+                self.btDeviceInfo.rawDeviceIdHex = OriginCommandParser.rawHexString(payload)
             case 0x0002:
                 break
             case 0x0003:
                 self.btDeviceInfo.firmwareVersion = OriginCommandParser.parseTwoByteUpperHex(payload)
+                self.btDeviceInfo.rawFirmwareVersionHex = OriginCommandParser.rawHexString(payload)
             case 0x0004:
                 self.btDeviceInfo.serialNumber = OriginCommandParser.parseLowerHexString(payload)
             case 0x0005:
@@ -403,9 +432,17 @@ extension LinkDevice: CBPeripheralDelegate {
                 peripheral.setNotifyValue(true, for: characteristic)
             case Self.otaCharacteristicUUIDString:
                 otaCharacteristic = characteristic
-                peripheral.setNotifyValue(true, for: characteristic)
-                DispatchQueue.main.async {
-                    self.isOTAReady = true
+                if characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate) {
+                    peripheral.setNotifyValue(true, for: characteristic)
+                    if characteristic.isNotifying {
+                        DispatchQueue.main.async {
+                            self.isOTAReady = true
+                        }
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.isOTAReady = true
+                    }
                 }
             default:
                 break
@@ -414,8 +451,15 @@ extension LinkDevice: CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
-        guard error == nil else { return }
         let uuidUpper = characteristic.uuid.uuidString.uppercased()
+        if uuidUpper == Self.otaCharacteristicUUIDString {
+            let ready = (error == nil) && characteristic.isNotifying
+            DispatchQueue.main.async {
+                self.isOTAReady = ready
+            }
+            return
+        }
+        guard error == nil else { return }
         if uuidUpper == Self.notifyCharacteristicUUIDString && characteristic.isNotifying {
             queryAllState()
         }
